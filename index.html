@@ -43,6 +43,16 @@ footer{max-width:1152px;margin:24px auto 0;padding:32px 0 48px;border-top:1px so
  .frm input[type="date"]::-webkit-datetime-edit{min-width:0;padding:0}
 }
 
+/* Suppress only programmatic pointer focus; keyboard focus remains visible. */
+#intro .pointer-focus:focus-visible{outline:none}
+.ticket-feedback{padding:26px;border:1px solid var(--l);border-radius:28px;background:var(--glass);box-shadow:var(--rim)}
+.ticket-feedback h2{font-size:22px;font-weight:550;line-height:1.35;letter-spacing:-.02em;text-wrap:pretty;margin:0 0 10px}
+.feedback-description{font-size:15px;line-height:1.6;color:var(--m);margin:0 0 20px}
+.ticket-feedback .chip{min-height:44px;padding:10px 18px}
+.feedback-status{font-size:14px;line-height:1.5;min-height:1.5em;margin:14px 0 8px;color:var(--p)}
+.feedback-note{font-size:13px;line-height:1.55;color:var(--m);margin:0}
+@media(max-width:560px){.ticket-feedback{padding:22px}.ticket-feedback h2{font-size:20px}.feedback-description{font-size:14px}.ticket-feedback .chips{gap:8px}}
+
 </style></head><body><a class="a11y-skip" href="#app">К содержанию</a>
 <div id="intro" role="dialog" aria-modal="true" aria-label="Билет №0">
 <div class="intro-tools"><a class="intro-urgent" href="#urgent">Срочная помощь</a><button class="skip" id="skip">Пропустить вступление</button></div>
@@ -196,7 +206,7 @@ del(b){if(E===b.dataset.id){E=null;const form=$('[data-f=task]');form.reset();$(
 plus(b){const t=P.tasks.find(x=>x.id==b.dataset.id),d=new Date(t.dl+'T00:00');d.setDate(d.getDate()+1);t.dl=iso(d);sv();out();toast('Срок сдвинут на день')},
 edit(b){const t=P.tasks.find(x=>x.id==b.dataset.id),f=$('[data-f=task]');E=t.id;f.t.value=t.title;f.d.value=t.dl;f.y.value=t.type;f.h.value=t.hours;$('#sb').textContent='Сохранить';f.t.focus()},
 clearp(b){sure(b,()=>{E=null;$('#sb').textContent='Добавить';P.tasks=[];sv();out()})},
-wipe(b){sure(b,()=>{try{localStorage.removeItem('b0p');localStorage.removeItem('b0r');sessionStorage.removeItem('b0i')}catch(e){}P={tasks:[],h:3,days:[0,1,1,1,1,1,0]};toast('Данные удалены');route(cur)})}};
+wipe(b){sure(b,()=>{try{localStorage.removeItem('b0p');localStorage.removeItem('b0r');sessionStorage.removeItem('b0i')}catch(e){}P={tasks:[],h:3,days:[0,1,1,1,1,1,0]};clearFeedback();toast('Данные удалены');route(cur)})}};
 document.addEventListener('click',e=>{const b=e.target.closest('[data-a]');if(b&&A[b.dataset.a])A[b.dataset.a](b)});
 document.addEventListener('change',e=>{const d=e.target.dataset.d;if(d!=null){P.days[d]=e.target.checked?1:0;sv();out()}});
 document.addEventListener('input',e=>{if(e.target.id=='hd'){const v=parseFloat(e.target.value);if(v>=0&&v<=18){P.h=v;sv();out()}}});
@@ -328,7 +338,7 @@ function flipTicket(back) {
   bk.inert = !back;
   ft.setAttribute('aria-hidden',String(back));
   bk.setAttribute('aria-hidden',String(!back));
-  if (back || keyboardInput) (back ? $('#go') : ft).focus({preventScroll:true});
+  if (back || keyboardInput) { const target=back ? $('#go') : ft; target.classList.toggle('pointer-focus',!keyboardInput); target.focus({preventScroll:true}); }
 }
 function finishIntro(focus = true) {
   sceneAnimation?.cancel();
@@ -373,6 +383,7 @@ function playIntro() {
   originFocus = document.activeElement;
   setIntroMode(true);
   flipTicket(false);
+  ft.classList.toggle('pointer-focus',!keyboardInput);
   ft.focus({preventScroll:true});
   const wrapper = $('.tkw');
   if (motionPreference.matches || keyboardInput) return;
@@ -446,6 +457,7 @@ function softChange(element){
  element.animate([{opacity:.55},{opacity:1}],{duration:180,easing:easeOut});
 }
 function polishView(){
+ mountFeedback();
  polishText(app);
  positionNav(true);
  // Read surfaces change only by crossfade; task data never shifts under the pointer.
@@ -460,6 +472,41 @@ document.addEventListener('click',event=>{
  if(event.target.closest('[data-a=pick]')){polishText($('#bs'));softChange($('#bs'))}
 });
 polishText($('#intro'));polishText($('footer'));
+
+// Demo feedback belongs to each route and stays in this document only.
+const feedbackAnswers=Object.create(null);
+const feedbackLabels=['Да','Частично','Пока нет'];
+function clearFeedback(){for(const key of Object.keys(feedbackAnswers))delete feedbackAnswers[key]}
+function mountFeedback(){
+ const key=cur.split('/')[1];
+ const content=$('.help-main');
+ if(!cur.startsWith('help/')||!R[key]||!content)return;
+ const selected=feedbackAnswers[key];
+ const section=document.createElement('section');
+ section.className='sec ticket-feedback';
+ section.dataset.ticket=key;
+ section.setAttribute('aria-labelledby','feedback-title');
+ section.innerHTML=`<h2 id="feedback-title">Стало понятнее, что делать дальше?</h2>
+ <p class="feedback-description">Оцени, насколько понятным оказался этот маршрут.</p>
+ <div class="chips" role="group" aria-labelledby="feedback-title">${feedbackLabels.map((label,index)=>`<button type="button" class="chip" data-feedback="${index}" aria-pressed="${selected===index}">${label}</button>`).join('')}</div>
+ <p class="feedback-status" role="status" aria-live="polite">${selected===undefined?'':`Ответ отмечен: «${feedbackLabels[selected]}». Спасибо!`}</p>
+ <p class="feedback-note">Демонстрация: ответы не отправляются на сервер.</p>`;
+ content.append(section);
+}
+document.addEventListener('click',event=>{
+ const button=event.target.closest('[data-feedback]');if(!button)return;
+ const section=button.closest('.ticket-feedback'),index=Number(button.dataset.feedback);
+ if(!section||!R[section.dataset.ticket]||!Number.isInteger(index)||index<0||index>=feedbackLabels.length)return;
+ feedbackAnswers[section.dataset.ticket]=index;
+ $$('[data-feedback]',section).forEach(item=>item.setAttribute('aria-pressed',String(item===button)));
+ const status=$('.feedback-status',section);
+ status.textContent=`Ответ отмечен: «${feedbackLabels[index]}». Спасибо!`;
+ polishText(status);softChange(status);
+});
+// Restore normal visible focus as soon as the visitor uses the keyboard.
+document.addEventListener('keydown',()=>{
+ $$('#intro .pointer-focus').forEach(element=>element.classList.remove('pointer-focus'));
+},true);
 
 setH();
 setIntroMode(false);
